@@ -335,8 +335,9 @@
 
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/coi-serviceworker@0.1.9/coi-serviceworker.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/piexifjs@1.0.6/piexif.js"></script>
-<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
 <script>
 "use strict";
 
@@ -545,11 +546,11 @@ const PNG_SIG  = [0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a];
 const PNG_KEEP = new Set(['IHDR','IDAT','IEND','PLTE','tRNS','acTL','fcTL','fdAT']);
 
 function stripPNG(buf) {
-  const view=new DataView(buf), out=[new Uint8Array(PNG_SIG)], removed=[];
+  const view=new DataView(buf), b=new Uint8Array(buf), out=[new Uint8Array(PNG_SIG)], removed=[];
   let pos=8;
   while(pos+8<=buf.byteLength) {
     const len=view.getUint32(pos);
-    const type=String.fromCharCode(buf[pos+4],buf[pos+5],buf[pos+6],buf[pos+7]);
+    const type=String.fromCharCode(b[pos+4],b[pos+5],b[pos+6],b[pos+7]);
     const tot=12+len;
     PNG_KEEP.has(type)?out.push(new Uint8Array(buf,pos,tot)):removed.push(type);
     pos+=tot;
@@ -559,12 +560,12 @@ function stripPNG(buf) {
 
 const STRIP_MK={0xe1:'APP1(EXIF/XMP)',0xeb:'APP11(C2PA)',0xed:'APP13(IPTC)'};
 function stripJPEG(buf) {
-  const view=new DataView(buf),out=[new Uint8Array([0xff,0xd8])],removed=[];
-  if(buf[0]!==0xff||buf[1]!==0xd8) return {bytes:buf,removed:[]};
+  const view=new DataView(buf), b=new Uint8Array(buf), out=[new Uint8Array([0xff,0xd8])], removed=[];
+  if(b[0]!==0xff||b[1]!==0xd8) return {bytes:buf,removed:[]};
   let pos=2;
   while(pos<buf.byteLength) {
-    if(buf[pos]!==0xff){out.push(new Uint8Array(buf,pos));break;}
-    const mk=buf[pos+1];
+    if(b[pos]!==0xff){out.push(new Uint8Array(buf,pos));break;}
+    const mk=b[pos+1];
     if(mk===0xd8||mk===0xd9||(mk>=0xd0&&mk<=0xd7)){out.push(new Uint8Array(buf,pos,2));pos+=2;continue;}
     if(pos+4>buf.byteLength){out.push(new Uint8Array(buf,pos));break;}
     const slen=view.getUint16(pos+2),end=pos+2+slen;
@@ -739,8 +740,7 @@ async function loadFF() {
   try {
     const {createFFmpeg}=FFmpeg;
     _ff=createFFmpeg({
-      corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-st@0.11.0/dist/ffmpeg-core.js',
-      wasmPath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-st@0.11.0/dist/ffmpeg-core.wasm',
+      corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
       log: false,
     });
     // suppress noisy log output
