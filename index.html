@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   Agency Spoofer — standalone HTML, deploy on GitHub Pages or Vercel.
-  All processing runs in the browser: piexifjs (image EXIF) + ffmpeg.wasm (video, single-threaded core-st — no SharedArrayBuffer required).
+  All processing runs in the browser: piexifjs (image EXIF) + ffmpeg.wasm v0.12 (single-threaded core@0.12.6 — no SharedArrayBuffer, works on file:// and GitHub Pages).
   No server required.
 
   DEPLOY:
@@ -335,9 +335,9 @@
 
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/coi-serviceworker@0.1.9/coi-serviceworker.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/piexifjs@1.0.6/piexif.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/umd/ffmpeg.js"></script>
 <script>
 "use strict";
 
@@ -738,16 +738,17 @@ async function loadFF() {
   msgEl.textContent='Loading ffmpeg.wasm (~30 MB)…';
 
   try {
-    const {createFFmpeg}=FFmpeg;
-    _ff=createFFmpeg({
-      corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
-      log: false,
+    const {FFmpeg:FF}=FFmpegWASM;
+    const {toBlobURL}=FFmpegUtil;
+    _ff=new FF();
+    const BASE='https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd';
+    _ff.on('log',({message})=>{
+      if(/frame=|fps=/.test(message)) log('  '+message.trim());
     });
-    // suppress noisy log output
-    _ff.setLogger(({type,message})=>{
-      if(type==='fferr'&&/frame=|fps=/.test(message)) log('  '+message.trim());
+    await _ff.load({
+      coreURL: await toBlobURL(`${BASE}/ffmpeg-core.js`,'text/javascript'),
+      wasmURL: await toBlobURL(`${BASE}/ffmpeg-core.wasm`,'application/wasm'),
     });
-    await _ff.load();
     _ffReady=true;
     statusEl.classList.remove('on');
     log('ffmpeg.wasm ready','lok');
@@ -765,7 +766,7 @@ async function loadFF() {
 
 async function spoofVideo(file) {
   const ff=await loadFF();
-  const {fetchFile}=FFmpeg;
+  const {fetchFile}=FFmpegUtil;
   const cfg=getCfg();
 
   const dev=rch(VID_DEVICES);
@@ -784,9 +785,9 @@ async function spoofVideo(file) {
   log(`  Location: ${loc.replace(/[+/]/g,' ').trim()}`);
   log(`  Date: ${dtS} | CRF: ${crf}`);
 
-  ff.FS('writeFile','input.mp4',await fetchFile(file));
+  await ff.writeFile('input.mp4',await fetchFile(file));
 
-  await ff.run(
+  await ff.exec([
     '-hide_banner','-loglevel','error',
     '-y','-i','input.mp4',
     '-vf',vf,'-map_metadata','-1',
@@ -808,11 +809,11 @@ async function spoofVideo(file) {
     '-af',`atempo=${at}`,'-c:a','aac','-b:a','192k','-ar','44100','-ac','2',
     '-movflags','+faststart+use_metadata_tags',
     'output.mp4'
-  );
+  ]);
 
-  const data=ff.FS('readFile','output.mp4');
-  try{ff.FS('unlink','input.mp4');}catch(_){}
-  try{ff.FS('unlink','output.mp4');}catch(_){}
+  const data=await ff.readFile('output.mp4');
+  try{await ff.deleteFile('input.mp4');}catch(_){}
+  try{await ff.deleteFile('output.mp4');}catch(_){}
   log(`  Re-encode done`,'lok');
   return new Blob([data.buffer],{type:'video/mp4'});
 }
